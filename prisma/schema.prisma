@@ -1,0 +1,1046 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────
+// USER PROFILES  (fixes companyId security — never trust JWT metadata)
+// ─────────────────────────────────────────
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique  // Supabase auth.users.id
+  companyId String
+  employeeId String? @unique
+  role      String   @default("EMPLOYEE")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([companyId])
+}
+
+// ─────────────────────────────────────────
+// HOLIDAY CALENDAR  (UAE-specific public holidays + configurable weekends)
+// ─────────────────────────────────────────
+
+model HolidayCalendar {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  nameAr    String?
+  date      DateTime @db.Date
+  isRecurring Boolean @default(false)  // true for fixed annual holidays
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, date])
+  @@index([companyId, date])
+}
+
+model WorkingDaysConfig {
+  id              String   @id @default(cuid())
+  companyId       String   @unique
+  workingDays     Int[]    // [1,2,3,4,5] = Mon-Fri; [0,1,2,3,4] = Sun-Thu (UAE gov)
+  workHoursPerDay Float    @default(8)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────
+// COMPANY STRUCTURE
+// ─────────────────────────────────────────
+
+model Company {
+  id        String    @id @default(cuid())
+  name      String
+  nameAr    String?
+  trn       String?   @unique
+  logo      String?
+  address   String?
+  city      String?
+  country   String    @default("UAE")
+  phone     String?
+  email     String?
+  website   String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  departments  Department[]
+  positions    Position[]
+  locations    Location[]
+  employees    Employee[]
+  leaveTypes   LeaveType[]
+  payrollRuns  PayrollRun[]
+  assets       Asset[]
+  accommodations Accommodation[]
+  benefitTypes BenefitType[]
+  disciplinaryTypes DisciplinaryType[]
+  roles        Role[]
+  userProfiles UserProfile[]
+}
+
+model Department {
+  id          String    @id @default(cuid())
+  companyId   String
+  name        String
+  nameAr      String?
+  code        String?
+  managerId   String?
+  parentId    String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  company    Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager    Employee?    @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+  parent     Department?  @relation("SubDepartments", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Department[] @relation("SubDepartments")
+  employees  Employee[]
+  positions  Position[]
+
+  @@index([companyId])
+}
+
+model Position {
+  id           String    @id @default(cuid())
+  companyId    String
+  departmentId String?
+  title        String
+  titleAr      String?
+  grade        String?
+  level        String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  employees  Employee[]
+
+  @@index([companyId])
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  address   String?
+  city      String?
+  country   String   @default("UAE")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company  @relation(fields: [companyId], references: [id])
+  employees Employee[]
+
+  @@index([companyId])
+}
+
+// ─────────────────────────────────────────
+// EMPLOYEES
+// ─────────────────────────────────────────
+
+model Employee {
+  id               String          @id @default(cuid())
+  employeeId       String          @unique
+  companyId        String
+  departmentId     String?
+  positionId       String?
+  locationId       String?
+  managerId        String?
+
+  firstName        String
+  lastName         String
+  firstNameAr      String?
+  lastNameAr       String?
+  dateOfBirth      DateTime?
+  gender           Gender?
+  nationality      String?
+  religion         String?
+  maritalStatus    MaritalStatus?
+  bloodGroup       String?
+  photo            String?
+
+  email            String          @unique
+  phone            String?
+  altPhone         String?
+  personalEmail    String?
+
+  emiratesId       String?         @unique
+  emiratesIdExpiry DateTime?
+  visaNumber       String?
+  visaExpiry       DateTime?
+  passportNumber   String?
+  passportExpiry   DateTime?
+  laborCardNumber  String?
+  laborCardExpiry  DateTime?
+  uaeEntryDate     DateTime?
+
+  joiningDate      DateTime
+  confirmationDate DateTime?
+  terminationDate  DateTime?
+  employmentType   EmploymentType  @default(FULL_TIME)
+  status           EmployeeStatus  @default(ACTIVE)
+
+  bankName         String?
+  bankAccount      String?
+  iban             String?
+
+  userId           String?         @unique
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  deletedAt        DateTime?
+  createdBy        String?
+  updatedBy        String?
+
+  company          Company         @relation(fields: [companyId], references: [id])
+  department       Department?     @relation(fields: [departmentId], references: [id])
+  position         Position?       @relation(fields: [positionId], references: [id])
+  location         Location?       @relation(fields: [locationId], references: [id])
+  manager          Employee?       @relation("EmployeeManager", fields: [managerId], references: [id])
+  subordinates     Employee[]      @relation("EmployeeManager")
+  departmentManaged Department[]   @relation("DepartmentManager")
+
+  emergencyContacts       EmployeeEmergencyContact[]
+  documents               EmployeeDocument[]
+  attendanceRecords       AttendanceRecord[]
+  leaveRequests           LeaveRequest[]
+  leaveBalances           LeaveBalance[]
+  salaries                EmployeeSalary[]
+  payslips                Payslip[]
+  assetAssignments        AssetAssignment[]
+  accommodationAssignment AccommodationAssignment?
+  employeeBenefits        EmployeeBenefit[]
+  disciplinaryRecords     DisciplinaryRecord[]
+  careerHistory           CareerHistory[]
+  notifications           Notification[]
+  auditLogs               AuditLog[]
+
+  @@index([companyId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([employeeId])
+}
+
+model EmployeeEmergencyContact {
+  id           String   @id @default(cuid())
+  employeeId   String
+  name         String
+  relationship String
+  phone        String
+  email        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+}
+
+// ─────────────────────────────────────────
+// DOCUMENTS & EXPIRY TRACKING
+// ─────────────────────────────────────────
+
+model DocumentType {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  nameAr          String?
+  requiresExpiry  Boolean  @default(true)
+  alertDaysBefore Int      @default(30)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  employeeDocuments EmployeeDocument[]
+}
+
+model EmployeeDocument {
+  id             String         @id @default(cuid())
+  employeeId     String
+  documentTypeId String
+  documentNumber String?
+  issueDate      DateTime?
+  expiryDate     DateTime?
+  issuedBy       String?
+  fileUrl        String?
+  fileName       String?
+  fileSize       Int?
+  mimeType       String?
+  storagePath    String?
+  uploadedBy     String?
+  notes          String?
+  status         DocumentStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+
+  employee     Employee     @relation(fields: [employeeId], references: [id])
+  documentType DocumentType @relation(fields: [documentTypeId], references: [id])
+
+  @@index([employeeId])
+  @@index([expiryDate])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────
+// ATTENDANCE
+// ─────────────────────────────────────────
+
+model AttendancePolicy {
+  id              String   @id @default(cuid())
+  companyId       String
+  name            String
+  workHoursPerDay Float    @default(8)
+  workDaysPerWeek Int      @default(5)
+  overtimeEnabled Boolean  @default(true)
+  graceMinutes    Int      @default(15)
+  isDefault       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+model ShiftSchedule {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  startTime String
+  endTime   String
+  breakTime Int      @default(60)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  attendanceRecords AttendanceRecord[]
+
+  @@index([companyId])
+}
+
+model AttendanceRecord {
+  id             String           @id @default(cuid())
+  employeeId     String
+  shiftId        String?
+  date           DateTime         @db.Date
+  checkIn        DateTime?
+  checkOut       DateTime?
+  checkInMethod  AttendanceMethod?
+  checkOutMethod AttendanceMethod?
+  workHours      Float?
+  overtime       Float?
+  status         AttendanceStatus @default(PRESENT)
+  notes          String?
+  approvedBy     String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  employee Employee       @relation(fields: [employeeId], references: [id])
+  shift    ShiftSchedule? @relation(fields: [shiftId], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────
+// LEAVE MANAGEMENT
+// ─────────────────────────────────────────
+
+model LeaveType {
+  id               String   @id @default(cuid())
+  companyId        String
+  name             String
+  nameAr           String?
+  code             String
+  maxDaysPerYear   Float
+  carryForward     Boolean  @default(false)
+  maxCarryForward  Float?
+  isPaid           Boolean  @default(true)
+  requiresApproval Boolean  @default(true)
+  minDaysNotice    Int      @default(1)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company       Company       @relation(fields: [companyId], references: [id])
+  leaveRequests LeaveRequest[]
+  leaveBalances LeaveBalance[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+}
+
+model LeaveBalance {
+  id          String   @id @default(cuid())
+  employeeId  String
+  leaveTypeId String
+  year        Int
+  allocated   Float
+  used        Float    @default(0)
+  carried     Float    @default(0)
+  pending     Float    @default(0)
+  remaining   Float
+  updatedAt   DateTime @updatedAt
+
+  employee  Employee  @relation(fields: [employeeId], references: [id])
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@index([employeeId])
+}
+
+model LeaveRequest {
+  id           String      @id @default(cuid())
+  employeeId   String
+  leaveTypeId  String
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  totalDays    Float
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  approvedBy   String?
+  approvedAt   DateTime?
+  rejectedBy   String?
+  rejectedAt   DateTime?
+  rejectReason String?
+  cancelledAt  DateTime?
+  attachments  String[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  employee  Employee  @relation(fields: [employeeId], references: [id])
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+// ─────────────────────────────────────────
+// PAYROLL
+// ─────────────────────────────────────────
+
+model SalaryComponent {
+  id              String              @id @default(cuid())
+  companyId       String
+  name            String
+  nameAr          String?
+  type            SalaryComponentType
+  calculationType SalaryCalcType
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model EmployeeSalary {
+  id                 String   @id @default(cuid())
+  employeeId         String
+  basicSalary        Float
+  housingAllowance   Float    @default(0)
+  transportAllowance Float    @default(0)
+  foodAllowance      Float    @default(0)
+  mobileAllowance    Float    @default(0)
+  otherAllowances    Float    @default(0)
+  totalSalary        Float
+  currency           String   @default("AED")
+  effectiveFrom      DateTime
+  effectiveTo        DateTime?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  createdBy          String?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+}
+
+model PayrollRun {
+  id          String        @id @default(cuid())
+  companyId   String
+  month       Int
+  year        Int
+  status      PayrollStatus @default(DRAFT)
+  processedAt DateTime?
+  processedBy String?
+  approvedAt  DateTime?
+  approvedBy  String?
+  totalAmount Float?
+  currency    String        @default("AED")
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  payslips Payslip[]
+
+  @@unique([companyId, month, year])
+  @@index([companyId])
+}
+
+model Payslip {
+  id                 String        @id @default(cuid())
+  payrollRunId       String
+  employeeId         String
+  basicSalary        Float
+  housingAllowance   Float         @default(0)
+  transportAllowance Float         @default(0)
+  otherAllowances    Float         @default(0)
+  overtime           Float         @default(0)
+  grossSalary        Float
+  deductions         Float         @default(0)
+  netSalary          Float
+  workingDays        Int
+  paidDays           Int
+  leaveDays          Int           @default(0)
+  absentDays         Int           @default(0)
+  status             PayslipStatus @default(DRAFT)
+  paidAt             DateTime?
+  fileUrl            String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id])
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+
+  @@unique([payrollRunId, employeeId])
+  @@index([employeeId])
+}
+
+// ─────────────────────────────────────────
+// ASSET MANAGEMENT
+// ─────────────────────────────────────────
+
+model AssetCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  nameAr    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  assets Asset[]
+}
+
+model Asset {
+  id             String         @id @default(cuid())
+  companyId      String
+  categoryId     String
+  name           String
+  code           String         @unique
+  serialNumber   String?
+  brand          String?
+  model          String?
+  purchaseDate   DateTime?
+  purchasePrice  Float?
+  warrantyExpiry DateTime?
+  status         AssetStatus    @default(AVAILABLE)
+  condition      AssetCondition @default(GOOD)
+  location       String?
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  company     Company         @relation(fields: [companyId], references: [id])
+  category    AssetCategory   @relation(fields: [categoryId], references: [id])
+  assignments AssetAssignment[]
+
+  @@index([companyId])
+  @@index([status])
+}
+
+model AssetAssignment {
+  id              String         @id @default(cuid())
+  assetId         String
+  employeeId      String
+  assignedAt      DateTime       @default(now())
+  returnedAt      DateTime?
+  condition       AssetCondition @default(GOOD)
+  returnCondition AssetCondition?
+  notes           String?
+  assignedBy      String?
+
+  asset    Asset    @relation(fields: [assetId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([assetId])
+  @@index([employeeId])
+}
+
+// ─────────────────────────────────────────
+// ACCOMMODATION
+// ─────────────────────────────────────────
+
+model Accommodation {
+  id        String            @id @default(cuid())
+  companyId String
+  name      String
+  address   String
+  city      String?
+  capacity  Int
+  type      AccommodationType
+  amenities String[]
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  rooms   Room[]
+
+  @@index([companyId])
+}
+
+model Room {
+  id               String   @id @default(cuid())
+  accommodationId  String
+  roomNumber       String
+  floor            String?
+  capacity         Int      @default(1)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  accommodation Accommodation            @relation(fields: [accommodationId], references: [id])
+  assignments   AccommodationAssignment[]
+
+  @@unique([accommodationId, roomNumber])
+  @@index([accommodationId])
+}
+
+model AccommodationAssignment {
+  id          String    @id @default(cuid())
+  employeeId  String    @unique
+  roomId      String
+  assignedAt  DateTime  @default(now())
+  vacatedAt   DateTime?
+  monthlyRent Float?
+  notes       String?
+  assignedBy  String?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  room     Room     @relation(fields: [roomId], references: [id])
+
+  @@index([roomId])
+}
+
+// ─────────────────────────────────────────
+// BENEFITS
+// ─────────────────────────────────────────
+
+model BenefitType {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  nameAr      String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  company          Company          @relation(fields: [companyId], references: [id])
+  employeeBenefits EmployeeBenefit[]
+
+  @@index([companyId])
+}
+
+model EmployeeBenefit {
+  id            String    @id @default(cuid())
+  employeeId    String
+  benefitTypeId String
+  value         Float?
+  startDate     DateTime
+  endDate       DateTime?
+  notes         String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+  benefitType BenefitType @relation(fields: [benefitTypeId], references: [id])
+
+  @@index([employeeId])
+}
+
+// ─────────────────────────────────────────
+// DISCIPLINARY
+// ─────────────────────────────────────────
+
+model DisciplinaryType {
+  id        String               @id @default(cuid())
+  companyId String
+  name      String
+  severity  DisciplinarySeverity
+  isActive  Boolean              @default(true)
+  createdAt DateTime             @default(now())
+
+  company Company              @relation(fields: [companyId], references: [id])
+  records DisciplinaryRecord[]
+
+  @@index([companyId])
+}
+
+model DisciplinaryRecord {
+  id           String             @id @default(cuid())
+  employeeId   String
+  typeId       String
+  incidentDate DateTime
+  description  String
+  action       String
+  actionDate   DateTime?
+  issuedBy     String?
+  appealStatus AppealStatus?
+  appealDate   DateTime?
+  appealReason String?
+  attachments  String[]
+  status       DisciplinaryStatus @default(OPEN)
+  closedAt     DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  employee         Employee         @relation(fields: [employeeId], references: [id])
+  disciplinaryType DisciplinaryType @relation(fields: [typeId], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────
+// CAREER HISTORY
+// ─────────────────────────────────────────
+
+model CareerHistory {
+  id             String          @id @default(cuid())
+  employeeId     String
+  type           CareerEventType
+  fromPosition   String?
+  toPosition     String?
+  fromDepartment String?
+  toDepartment   String?
+  fromSalary     Float?
+  toSalary       Float?
+  effectiveDate  DateTime
+  reason         String?
+  notes          String?
+  approvedBy     String?
+  createdAt      DateTime        @default(now())
+  createdBy      String?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────
+
+model Notification {
+  id         String              @id @default(cuid())
+  employeeId String?
+  companyId  String?
+  type       NotificationType
+  title      String
+  message    String
+  data       Json?
+  isRead     Boolean             @default(false)
+  readAt     DateTime?
+  channel    NotificationChannel @default(IN_APP)
+  sentAt     DateTime?
+  createdAt  DateTime            @default(now())
+
+  employee Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+  @@index([isRead])
+  @@index([type])
+}
+
+// ─────────────────────────────────────────
+// DOCUMENT COMPLIANCE
+// ─────────────────────────────────────────
+
+model DocumentReminderConfig {
+  id             String   @id @default(cuid())
+  companyId      String
+  documentTypeId String?  // null = applies to all document types for this company
+  reminderDays   Int[]    // e.g. [90, 60, 30, 14, 7] — days BEFORE expiry to send reminder
+  notifyEmployee Boolean  @default(true)
+  notifyManager  Boolean  @default(false)
+  notifyHR       Boolean  @default(true)
+  emailEnabled   Boolean  @default(true)
+  inAppEnabled   Boolean  @default(true)
+  isEnabled      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([companyId, documentTypeId])
+  @@index([companyId])
+}
+
+// Tracks every individual reminder sent — prevents duplicate sends for the same interval
+model DocumentReminderLog {
+  id           String   @id @default(cuid())
+  documentId   String   // EmployeeDocument.id
+  employeeId   String
+  companyId    String
+  reminderDays Int      // which interval triggered this (e.g. 30 = "30-day reminder")
+  channel      String   // "EMAIL" | "IN_APP"
+  sentAt       DateTime @default(now())
+
+  @@unique([documentId, reminderDays, channel])
+  @@index([documentId])
+  @@index([employeeId])
+  @@index([companyId, sentAt])
+}
+
+// ─────────────────────────────────────────
+// AUDIT LOGS
+// ─────────────────────────────────────────
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  employeeId String?
+  userId     String?
+  action     String
+  module     String
+  entityId   String?
+  entityType String?
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  employee Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([userId])
+  @@index([module])
+  @@index([createdAt])
+  @@index([module, entityId])
+  @@index([employeeId, createdAt])
+}
+
+// ─────────────────────────────────────────
+// RBAC
+// ─────────────────────────────────────────
+
+model Role {
+  id          String   @id @default(cuid())
+  companyId   String?
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  company     Company?         @relation(fields: [companyId], references: [id])
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([companyId, name])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@unique([module, action])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  companyId  String?
+  assignedAt DateTime @default(now())
+
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  FREELANCE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  TERMINATED
+  PROBATION
+}
+
+enum DocumentStatus {
+  ACTIVE
+  EXPIRED
+  EXPIRING_SOON
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LATE
+  ON_LEAVE
+  HOLIDAY
+  WEEKEND
+  REMOTE
+}
+
+enum AttendanceMethod {
+  MANUAL
+  BIOMETRIC
+  MOBILE
+  WEB
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum SalaryComponentType {
+  BASIC
+  ALLOWANCE
+  DEDUCTION
+  BONUS
+}
+
+enum SalaryCalcType {
+  FIXED
+  PERCENTAGE
+}
+
+enum PayrollStatus {
+  DRAFT
+  PROCESSING
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum PayslipStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ASSIGNED
+  UNDER_MAINTENANCE
+  DISPOSED
+  LOST
+}
+
+enum AssetCondition {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+}
+
+enum AccommodationType {
+  VILLA
+  APARTMENT
+  LABOR_CAMP
+  HOTEL
+}
+
+enum DisciplinarySeverity {
+  MINOR
+  MODERATE
+  MAJOR
+  CRITICAL
+}
+
+enum DisciplinaryStatus {
+  OPEN
+  CLOSED
+  APPEALED
+}
+
+enum AppealStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum CareerEventType {
+  PROMOTION
+  DEMOTION
+  TRANSFER
+  ROLE_CHANGE
+  SALARY_REVISION
+  PROBATION_COMPLETION
+}
+
+enum NotificationType {
+  DOCUMENT_EXPIRY
+  LEAVE_REQUEST
+  LEAVE_APPROVED
+  LEAVE_REJECTED
+  PAYSLIP_READY
+  BIRTHDAY
+  ANNIVERSARY
+  DISCIPLINARY
+  GENERAL
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WHATSAPP
+  SMS
+}
