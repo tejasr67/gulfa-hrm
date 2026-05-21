@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { Prisma } from "@prisma/client";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,17 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { ReminderConfigPanel } from "@/components/modules/compliance/ReminderConfigPanel";
+
+type ReminderLog = Prisma.DocumentReminderLogGetPayload<{
+  select: {
+    id: true;
+    documentId: true;
+    employeeId: true;
+    reminderDays: true;
+    channel: true;
+    sentAt: true;
+  };
+}>;
 
 export const metadata: Metadata = { title: "Reminder Settings" };
 
@@ -18,7 +30,7 @@ export default async function ComplianceRemindersPage() {
   });
 
   // Recent reminder log (last 20)
-  const recentLogs = await prisma.documentReminderLog.findMany({
+  const recentLogs: ReminderLog[] = await prisma.documentReminderLog.findMany({
     where: { companyId },
     orderBy: { sentAt: "desc" },
     take: 20,
