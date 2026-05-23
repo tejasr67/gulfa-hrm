@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/notifications",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/document-expiry",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/webhooks",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
