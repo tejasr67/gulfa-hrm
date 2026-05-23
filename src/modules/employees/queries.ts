@@ -228,17 +228,14 @@ export async function createEmployee(
   input: CreateEmployeeInput,
   createdBy: string
 ) {
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${companyId}))`;
-    const last = await tx.employee.findFirst({
-      where: { companyId },
-      orderBy: { employeeId: "desc" },
-      select: { employeeId: true },
-    });
-    const seq = last ? parseInt(last.employeeId.slice(4), 10) : 0;
-    const employeeId = generateEmployeeId(seq + 1);
-    return tx.employee.create({ data: { ...input, companyId, employeeId, createdBy } });
+  const last = await prisma.employee.findFirst({
+    where: { companyId },
+    orderBy: { employeeId: "desc" },
+    select: { employeeId: true },
   });
+  const seq = last ? parseInt(last.employeeId.slice(4), 10) : 0;
+  const employeeId = generateEmployeeId(seq + 1);
+  return prisma.employee.create({ data: { ...input, companyId, employeeId, createdBy } });
 }
 
 export async function updateEmployee(
