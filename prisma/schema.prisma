@@ -79,8 +79,12 @@ model Company {
   employees    Employee[]
   leaveTypes   LeaveType[]
   payrollRuns  PayrollRun[]
-  assets       Asset[]
+  salaryAdvances    SalaryAdvance[]
+  assets            Asset[]
+  assetMaintenanceLogs AssetMaintenance[]
   accommodations Accommodation[]
+  uniformStockItems UniformStockItem[]
+  uniformIssuances  UniformIssuance[]
   benefitTypes BenefitType[]
   disciplinaryTypes DisciplinaryType[]
   roles        Role[]
@@ -108,6 +112,7 @@ model Department {
   positions  Position[]
 
   @@index([companyId])
+  @@index([companyId, isActive])
 }
 
 model Position {
@@ -217,10 +222,14 @@ model Employee {
   attendanceRecords       AttendanceRecord[]
   leaveRequests           LeaveRequest[]
   leaveBalances           LeaveBalance[]
+  relievingFor            LeaveRequest[]           @relation("LeaveReliever")
+  encashmentRequests      LeaveEncashmentRequest[]
   salaries                EmployeeSalary[]
   payslips                Payslip[]
+  salaryAdvances          SalaryAdvance[]
   assetAssignments        AssetAssignment[]
-  accommodationAssignment AccommodationAssignment?
+  accommodationAssignments AccommodationAssignment[]
+  uniformIssuances        UniformIssuance[]
   employeeBenefits        EmployeeBenefit[]
   disciplinaryRecords     DisciplinaryRecord[]
   careerHistory           CareerHistory[]
@@ -352,6 +361,7 @@ model AttendanceRecord {
   @@index([employeeId])
   @@index([date])
   @@index([status])
+  @@index([date, status])
 }
 
 // ─────────────────────────────────────────
@@ -359,24 +369,41 @@ model AttendanceRecord {
 // ─────────────────────────────────────────
 
 model LeaveType {
-  id               String   @id @default(cuid())
-  companyId        String
-  name             String
-  nameAr           String?
-  code             String
-  maxDaysPerYear   Float
-  carryForward     Boolean  @default(false)
-  maxCarryForward  Float?
-  isPaid           Boolean  @default(true)
-  requiresApproval Boolean  @default(true)
-  minDaysNotice    Int      @default(1)
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                     String              @id @default(cuid())
+  companyId              String
+  name                   String
+  nameAr                 String?
+  code                   String
+  maxDaysPerYear         Float
+  carryForward           Boolean             @default(false)
+  maxCarryForward        Float?
+  isPaid                 Boolean             @default(true)
+  requiresApproval       Boolean             @default(true)
+  minDaysNotice          Int                 @default(1)
+  // Probation rules
+  allowedDuringProbation Boolean             @default(false)
+  probationDaysLimit     Float?              // max days allowed during probation
+  minServiceMonths       Int                 @default(0) // months of service before eligible
+  // Gender restriction
+  genderRestriction      LeaveGender         @default(ALL)
+  // Leave structure
+  halfDayAllowed         Boolean             @default(false)
+  maxConsecutiveDays     Float?              // prevent abuse
+  requiresReliever       Boolean             @default(false)
+  requiresAttachment     Boolean             @default(false)
+  // Encashment
+  encashable             Boolean             @default(false)
+  maxEncashDays          Float?
+  isActive               Boolean             @default(true)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
 
-  company       Company       @relation(fields: [companyId], references: [id])
-  leaveRequests LeaveRequest[]
-  leaveBalances LeaveBalance[]
+  company          Company                  @relation(fields: [companyId], references: [id])
+  leaveRequests    LeaveRequest[]
+  leaveBalances    LeaveBalance[]
+  approvalConfigs  LeaveApprovalConfig[]
+  encashments      LeaveEncashmentRequest[]
+  carryForwardLogs LeaveCarryForwardLog[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -391,6 +418,7 @@ model LeaveBalance {
   used        Float    @default(0)
   carried     Float    @default(0)
   pending     Float    @default(0)
+  encashed    Float    @default(0)
   remaining   Float
   updatedAt   DateTime @updatedAt
 
@@ -402,30 +430,126 @@ model LeaveBalance {
 }
 
 model LeaveRequest {
-  id           String      @id @default(cuid())
-  employeeId   String
-  leaveTypeId  String
-  startDate    DateTime    @db.Date
-  endDate      DateTime    @db.Date
-  totalDays    Float
-  reason       String?
-  status       LeaveStatus @default(PENDING)
-  approvedBy   String?
-  approvedAt   DateTime?
-  rejectedBy   String?
-  rejectedAt   DateTime?
-  rejectReason String?
-  cancelledAt  DateTime?
-  attachments  String[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                  String          @id @default(cuid())
+  employeeId          String
+  leaveTypeId         String
+  startDate           DateTime        @db.Date
+  endDate             DateTime        @db.Date
+  totalDays           Float
+  isHalfDay           Boolean         @default(false)
+  halfDayPeriod       HalfDayPeriod?
+  reason              String?
+  status              LeaveStatus     @default(PENDING)
+  currentApprovalStep Int             @default(1)
+  // Final approval (filled after last step)
+  approvedBy          String?
+  approvedAt          DateTime?
+  rejectedBy          String?
+  rejectedAt          DateTime?
+  rejectReason        String?
+  cancelledAt         DateTime?
+  cancelReason        String?
+  withdrawnAt         DateTime?
+  // Reliever
+  relieverId          String?
+  relieverStatus      RelieverStatus  @default(NOT_REQUIRED)
+  relieverNote        String?
+  relieverApprovedAt  DateTime?
+  // Attachments (Supabase storage keys)
+  attachments         String[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
-  employee  Employee  @relation(fields: [employeeId], references: [id])
-  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+  employee         Employee             @relation(fields: [employeeId], references: [id])
+  leaveType        LeaveType            @relation(fields: [leaveTypeId], references: [id])
+  reliever         Employee?            @relation("LeaveReliever", fields: [relieverId], references: [id])
+  approvalActions  LeaveApprovalAction[]
 
   @@index([employeeId])
   @@index([status])
   @@index([startDate, endDate])
+  @@index([relieverId])
+}
+
+// Multi-level approval configuration per leave type
+model LeaveApprovalConfig {
+  id            String       @id @default(cuid())
+  companyId     String
+  leaveTypeId   String?      // null = applies to all leave types
+  step          Int          // 1, 2, 3...
+  approverType  ApproverType
+  approverRoleId String?     // for SPECIFIC_ROLE
+  approverId    String?      // for SPECIFIC_USER
+  isRequired    Boolean      @default(true)
+  timeoutHours  Int?         // auto-escalate after N hours (null = no timeout)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  leaveType LeaveType? @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([companyId, leaveTypeId, step])
+  @@index([companyId])
+}
+
+// Audit trail of each approval action on a leave request
+model LeaveApprovalAction {
+  id             String         @id @default(cuid())
+  leaveRequestId String
+  step           Int
+  approverId     String         // userId who acted
+  approverName   String         // denormalized for audit trail
+  action         ApprovalAction
+  note           String?
+  createdAt      DateTime       @default(now())
+
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  @@index([leaveRequestId])
+  @@index([approverId])
+}
+
+// Leave encashment requests
+model LeaveEncashmentRequest {
+  id          String           @id @default(cuid())
+  employeeId  String
+  leaveTypeId String
+  year        Int
+  days        Float
+  amount      Float?           // computed from salary at time of request
+  status      EncashmentStatus @default(PENDING)
+  approvedBy  String?
+  approvedAt  DateTime?
+  processedAt DateTime?
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  employee  Employee  @relation(fields: [employeeId], references: [id])
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@index([employeeId])
+  @@index([status])
+}
+
+// Audit trail for year-end carry-forward processing
+model LeaveCarryForwardLog {
+  id          String   @id @default(cuid())
+  companyId   String
+  employeeId  String
+  leaveTypeId String
+  fromYear    Int
+  toYear      Int
+  daysCarried Float
+  daysExpired Float    @default(0)
+  processedAt DateTime @default(now())
+  processedBy String?  // userId or 'system'
+
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, fromYear])
+  @@index([companyId, fromYear])
+  @@index([employeeId])
 }
 
 // ─────────────────────────────────────────
@@ -455,6 +579,7 @@ model EmployeeSalary {
   foodAllowance      Float    @default(0)
   mobileAllowance    Float    @default(0)
   otherAllowances    Float    @default(0)
+  commission         Float    @default(0)
   totalSalary        Float
   currency           String   @default("AED")
   effectiveFrom      DateTime
@@ -499,25 +624,71 @@ model Payslip {
   basicSalary        Float
   housingAllowance   Float         @default(0)
   transportAllowance Float         @default(0)
+  foodAllowance      Float         @default(0)
+  mobileAllowance    Float         @default(0)
   otherAllowances    Float         @default(0)
   overtime           Float         @default(0)
+  commission         Float         @default(0)
   grossSalary        Float
   deductions         Float         @default(0)
+  unpaidLeaveDeduction Float       @default(0)
+  advanceDeduction   Float         @default(0)
   netSalary          Float
   workingDays        Int
   paidDays           Int
   leaveDays          Int           @default(0)
+  unpaidLeaveDays    Int           @default(0)
   absentDays         Int           @default(0)
+  overtimeHours      Float         @default(0)
+  notes              String?
   status             PayslipStatus @default(DRAFT)
   paidAt             DateTime?
   fileUrl            String?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id])
-  employee   Employee   @relation(fields: [employeeId], references: [id])
+  payrollRun PayrollRun      @relation(fields: [payrollRunId], references: [id])
+  employee   Employee        @relation(fields: [employeeId], references: [id])
+  lineItems  PayslipLineItem[]
 
   @@unique([payrollRunId, employeeId])
+  @@index([employeeId])
+  @@index([payrollRunId])
+}
+
+model PayslipLineItem {
+  id        String              @id @default(cuid())
+  payslipId String
+  name      String
+  type      SalaryComponentType
+  amount    Float
+  notes     String?
+
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  @@index([payslipId])
+}
+
+model SalaryAdvance {
+  id         String              @id @default(cuid())
+  companyId  String
+  employeeId String
+  amount     Float
+  reason     String?
+  month      Int
+  year       Int
+  status     SalaryAdvanceStatus @default(PENDING)
+  approvedBy String?
+  approvedAt DateTime?
+  deductedIn String?
+  createdBy  String
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([companyId])
   @@index([employeeId])
 }
 
@@ -526,59 +697,103 @@ model Payslip {
 // ─────────────────────────────────────────
 
 model AssetCategory {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  nameAr    String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  companyId   String?  // null = global/system category
+  name        String
+  nameAr      String?
+  icon        String?  // e.g. "laptop", "car", "phone"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
   assets Asset[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
 }
 
 model Asset {
-  id             String         @id @default(cuid())
-  companyId      String
-  categoryId     String
-  name           String
-  code           String         @unique
-  serialNumber   String?
-  brand          String?
-  model          String?
-  purchaseDate   DateTime?
-  purchasePrice  Float?
-  warrantyExpiry DateTime?
-  status         AssetStatus    @default(AVAILABLE)
-  condition      AssetCondition @default(GOOD)
-  location       String?
-  notes          String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  deletedAt      DateTime?
+  id                    String         @id @default(cuid())
+  companyId             String
+  categoryId            String
+  name                  String
+  code                  String         @unique
+  serialNumber          String?
+  brand                 String?
+  model                 String?
+  purchaseDate          DateTime?
+  purchasePrice         Float?
+  currentValue          Float?
+  depreciationRate      Float?         // % per year e.g. 20 = 20%
+  warrantyExpiry        DateTime?
+  replacementCycleMonths Int?          // expected useful life in months
+  lastMaintenanceAt     DateTime?
+  nextMaintenanceAt     DateTime?
+  status                AssetStatus    @default(AVAILABLE)
+  condition             AssetCondition @default(GOOD)
+  location              String?
+  imageUrl              String?
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  deletedAt             DateTime?
 
-  company     Company         @relation(fields: [companyId], references: [id])
-  category    AssetCategory   @relation(fields: [categoryId], references: [id])
-  assignments AssetAssignment[]
+  company      Company            @relation(fields: [companyId], references: [id])
+  category     AssetCategory      @relation(fields: [categoryId], references: [id])
+  assignments  AssetAssignment[]
+  maintenanceLogs AssetMaintenance[]
 
   @@index([companyId])
   @@index([status])
+  @@index([categoryId])
+  @@index([nextMaintenanceAt])
 }
 
 model AssetAssignment {
-  id              String         @id @default(cuid())
-  assetId         String
-  employeeId      String
-  assignedAt      DateTime       @default(now())
-  returnedAt      DateTime?
-  condition       AssetCondition @default(GOOD)
-  returnCondition AssetCondition?
-  notes           String?
-  assignedBy      String?
+  id                 String         @id @default(cuid())
+  assetId            String
+  employeeId         String
+  assignedAt         DateTime       @default(now())
+  expectedReturnDate DateTime?
+  returnedAt         DateTime?
+  condition          AssetCondition @default(GOOD)
+  returnCondition    AssetCondition?
+  notes              String?
+  returnNotes        String?
+  assignedBy         String?
+  returnedBy         String?
 
   asset    Asset    @relation(fields: [assetId], references: [id])
   employee Employee @relation(fields: [employeeId], references: [id])
 
   @@index([assetId])
   @@index([employeeId])
+  @@index([returnedAt])
+}
+
+model AssetMaintenance {
+  id               String                  @id @default(cuid())
+  assetId          String
+  companyId        String
+  type             AssetMaintenanceType
+  status           AssetMaintenanceStatus  @default(SCHEDULED)
+  scheduledAt      DateTime
+  completedAt      DateTime?
+  cost             Float?
+  vendor           String?
+  description      String?
+  outcome          String?
+  performedBy      String?
+  createdBy        String
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  asset   Asset   @relation(fields: [assetId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([assetId])
+  @@index([companyId])
+  @@index([scheduledAt])
+  @@index([status])
 }
 
 // ─────────────────────────────────────────
@@ -622,18 +837,21 @@ model Room {
 
 model AccommodationAssignment {
   id          String    @id @default(cuid())
-  employeeId  String    @unique
+  employeeId  String
   roomId      String
   assignedAt  DateTime  @default(now())
   vacatedAt   DateTime?
   monthlyRent Float?
   notes       String?
+  vacateNotes String?
   assignedBy  String?
 
   employee Employee @relation(fields: [employeeId], references: [id])
   room     Room     @relation(fields: [roomId], references: [id])
 
+  @@index([employeeId])
   @@index([roomId])
+  @@index([vacatedAt])
 }
 
 // ─────────────────────────────────────────
@@ -671,6 +889,8 @@ model EmployeeBenefit {
   benefitType BenefitType @relation(fields: [benefitTypeId], references: [id])
 
   @@index([employeeId])
+  @@index([benefitTypeId])
+  @@index([employeeId, isActive])
 }
 
 // ─────────────────────────────────────────
@@ -728,6 +948,10 @@ model CareerHistory {
   toPosition     String?
   fromDepartment String?
   toDepartment   String?
+  fromManagerId  String?
+  toManagerId    String?
+  fromLocationId String?
+  toLocationId   String?
   fromSalary     Float?
   toSalary       Float?
   effectiveDate  DateTime
@@ -740,6 +964,8 @@ model CareerHistory {
   employee Employee @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId])
+  @@index([type])
+  @@index([effectiveDate])
 }
 
 // ─────────────────────────────────────────
@@ -830,6 +1056,52 @@ model AuditLog {
   @@index([createdAt])
   @@index([module, entityId])
   @@index([employeeId, createdAt])
+}
+
+// ─────────────────────────────────────────
+// UNIFORMS
+// ─────────────────────────────────────────
+
+model UniformStockItem {
+  id        String   @id @default(cuid())
+  companyId String
+  category  String   // TSHIRT | PANTS | SHOES | CAPS | OTHER
+  size      String   // "S", "M", "L", "XL", "28", "29", "40-42" etc.
+  color     String   @default("") // "Red", "White", "Blue", "Grey" — "" for non-colour items
+  location  String   // "DIP", "Ajman", etc.
+  qty       Int      @default(0)
+  minStock  Int      @default(5)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, category, size, color, location])
+  @@index([companyId])
+  @@index([companyId, category])
+}
+
+model UniformIssuance {
+  id         String    @id @default(cuid())
+  companyId  String
+  employeeId String
+  category   String
+  size       String
+  color      String   @default("") // "" for non-colour items
+  location   String
+  qty        Int       @default(1)
+  issuedAt   DateTime  @default(now())
+  issuedBy   String?
+  notes      String?
+  returnedAt DateTime?
+  returnNotes String?
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([companyId, category])
 }
 
 // ─────────────────────────────────────────
@@ -943,10 +1215,53 @@ enum AttendanceMethod {
 }
 
 enum LeaveStatus {
-  PENDING
+  PENDING           // awaiting first approval step
+  PENDING_RELIEVER  // awaiting reliever acceptance (before approval continues)
+  IN_REVIEW         // multi-step: partially approved, not yet final
   APPROVED
   REJECTED
   CANCELLED
+  WITHDRAWN         // employee withdrew before start date
+}
+
+enum RelieverStatus {
+  NOT_REQUIRED
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum HalfDayPeriod {
+  MORNING
+  AFTERNOON
+}
+
+enum LeaveGender {
+  ALL
+  MALE
+  FEMALE
+}
+
+enum ApproverType {
+  DIRECT_MANAGER
+  DEPARTMENT_HEAD
+  HR_MANAGER
+  SPECIFIC_ROLE
+  SPECIFIC_USER
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+  ESCALATED
+  DELEGATED
+}
+
+enum EncashmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PROCESSED
 }
 
 enum SalaryComponentType {
@@ -954,6 +1269,8 @@ enum SalaryComponentType {
   ALLOWANCE
   DEDUCTION
   BONUS
+  OVERTIME
+  COMMISSION
 }
 
 enum SalaryCalcType {
@@ -975,10 +1292,18 @@ enum PayslipStatus {
   PAID
 }
 
+enum SalaryAdvanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DEDUCTED
+}
+
 enum AssetStatus {
   AVAILABLE
   ASSIGNED
   UNDER_MAINTENANCE
+  RESERVED
   DISPOSED
   LOST
 }
@@ -989,6 +1314,22 @@ enum AssetCondition {
   FAIR
   POOR
   DAMAGED
+}
+
+enum AssetMaintenanceType {
+  ROUTINE
+  REPAIR
+  INSPECTION
+  REPLACEMENT
+  CALIBRATION
+}
+
+enum AssetMaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  OVERDUE
 }
 
 enum AccommodationType {
@@ -1024,6 +1365,7 @@ enum CareerEventType {
   ROLE_CHANGE
   SALARY_REVISION
   PROBATION_COMPLETION
+  MANAGER_CHANGE
 }
 
 enum NotificationType {
@@ -1035,6 +1377,8 @@ enum NotificationType {
   BIRTHDAY
   ANNIVERSARY
   DISCIPLINARY
+  PROBATION_REMINDER
+  PAYROLL_COMPLETE
   GENERAL
 }
 
@@ -1043,4 +1387,122 @@ enum NotificationChannel {
   EMAIL
   WHATSAPP
   SMS
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+// ─────────────────────────────────────────
+// INTEGRATION API KEYS
+// ─────────────────────────────────────────
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  companyId   String
+  name        String
+  keyHash     String    @unique
+  keyPrefix   String    // first 12 chars for display (non-secret)
+  scopes      String[]  // e.g. ["employees:read","payroll:read"]
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  revokedBy   String?
+
+  @@index([companyId])
+  @@index([keyHash])
+}
+
+// ─────────────────────────────────────────
+// WEBHOOK ENDPOINTS & DELIVERY
+// ─────────────────────────────────────────
+
+model WebhookEndpoint {
+  id          String          @id @default(cuid())
+  companyId   String
+  name        String
+  url         String
+  secret      String          // Raw HMAC signing secret; server-side only — never returned in API responses
+  events      WebhookEvent[]
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  deliveries  WebhookDelivery[]
+
+  @@index([companyId])
+}
+
+model WebhookDelivery {
+  id              String          @id @default(cuid())
+  endpointId      String
+  event           WebhookEvent
+  payload         Json
+  status          DeliveryStatus  @default(PENDING)
+  attempts        Int             @default(0)
+  maxAttempts     Int             @default(5)
+  nextRetryAt     DateTime        @default(now())
+  lastAttemptAt   DateTime?
+  responseStatus  Int?
+  responseBody    String?
+  lastError       String?
+  createdAt       DateTime        @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([endpointId])
+}
+
+enum WebhookEvent {
+  EMPLOYEE_CREATED
+  EMPLOYEE_UPDATED
+  EMPLOYEE_TERMINATED
+  LEAVE_REQUESTED
+  LEAVE_APPROVED
+  LEAVE_REJECTED
+  PAYROLL_RUN_COMPLETED
+  PAYSLIP_GENERATED
+  ATTENDANCE_RECORDED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  ABANDONED
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATION QUEUE  (async email delivery with retry)
+// ─────────────────────────────────────────
+
+model NotificationQueue {
+  id             String              @id @default(cuid())
+  companyId      String
+  type           NotificationType
+  channel        NotificationChannel @default(EMAIL)
+  recipientEmail String?
+  recipientId    String?
+  subject        String
+  bodyHtml       String
+  bodyText       String
+  status         QueueStatus         @default(PENDING)
+  attempts       Int                 @default(0)
+  maxAttempts    Int                 @default(3)
+  lastError      String?
+  scheduledAt    DateTime            @default(now())
+  processedAt    DateTime?
+  metadata       Json?
+  createdAt      DateTime            @default(now())
+
+  @@index([status, scheduledAt])
+  @@index([companyId])
+  @@index([type])
 }

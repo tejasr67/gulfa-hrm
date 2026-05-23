@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireSession } from "@/lib/auth/session";
-import { ok, unauthorized, serverError, err } from "@/lib/api/response";
+import { requirePermission } from "@/lib/auth/permissions";
+import { ok, unauthorized, forbidden, serverError, err } from "@/lib/api/response";
 import { prisma } from "@/lib/prisma";
 import { upsertReminderConfig } from "@/modules/compliance/queries";
 import { z } from "zod";
@@ -8,6 +9,7 @@ import { z } from "zod";
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession();
+    await requirePermission(session, "SETTINGS:READ");
     const sp = new URL(request.url).searchParams;
     const documentTypeId = sp.get("documentTypeId");
 
@@ -22,6 +24,7 @@ export async function GET(request: NextRequest) {
     return ok(configs);
   } catch (e) {
     if (e instanceof Error && e.message === "Unauthorized") return unauthorized();
+    if (e instanceof Error && e.message.startsWith("Permission denied")) return forbidden();
     return serverError(e);
   }
 }
@@ -40,10 +43,7 @@ const patchSchema = z.object({
 export async function PATCH(request: NextRequest) {
   try {
     const session = await requireSession();
-    if (session.role !== "ADMIN" && session.role !== "HR") {
-      return unauthorized();
-    }
-
+    await requirePermission(session, "SETTINGS:UPDATE");
     const body = await request.json();
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) return err(parsed.error.issues[0].message);
@@ -53,6 +53,7 @@ export async function PATCH(request: NextRequest) {
     return ok(config);
   } catch (e) {
     if (e instanceof Error && e.message === "Unauthorized") return unauthorized();
+    if (e instanceof Error && e.message.startsWith("Permission denied")) return forbidden();
     return serverError(e);
   }
 }

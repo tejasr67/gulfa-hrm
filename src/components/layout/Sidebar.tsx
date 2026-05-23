@@ -19,6 +19,9 @@ import {
   Building2,
   ChevronLeft,
   ShieldCheck,
+  BarChart3,
+  Key,
+  Shirt,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useUIStore } from "@/stores/ui.store";
@@ -33,14 +36,17 @@ const NAV_ITEMS = [
   { label: "Documents", href: "/documents", icon: FileText },
   { label: "Assets", href: "/assets", icon: Package },
   { label: "Accommodation", href: "/accommodation", icon: Home },
+  { label: "Uniforms", href: "/uniforms", icon: Shirt },
   { label: "Benefits", href: "/benefits", icon: Heart },
   { label: "Disciplinary", href: "/disciplinary", icon: AlertTriangle },
   { label: "Career", href: "/career", icon: TrendingUp },
   { label: "Compliance", href: "/compliance", icon: ShieldCheck },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
 ] as const;
 
 const BOTTOM_ITEMS = [
   { label: "Notifications", href: "/notifications", icon: Bell },
+  { label: "Integrations", href: "/settings/integrations", icon: Key },
   { label: "Settings", href: "/settings", icon: Settings },
 ] as const;
 

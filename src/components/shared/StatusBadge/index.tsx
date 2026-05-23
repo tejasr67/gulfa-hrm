@@ -15,9 +15,12 @@ const EMPLOYEE_STATUS_MAP: StatusMap = {
 
 const LEAVE_STATUS_MAP: StatusMap = {
   PENDING: "warning",
+  PENDING_RELIEVER: "warning",
+  IN_REVIEW: "info",
   APPROVED: "success",
   REJECTED: "danger",
   CANCELLED: "secondary",
+  WITHDRAWN: "secondary",
 };
 
 const DOCUMENT_STATUS_MAP: StatusMap = {
@@ -42,6 +45,7 @@ const ASSET_STATUS_MAP: StatusMap = {
   AVAILABLE: "success",
   ASSIGNED: "info",
   UNDER_MAINTENANCE: "warning",
+  RESERVED: "secondary",
   DISPOSED: "secondary",
   LOST: "danger",
 };

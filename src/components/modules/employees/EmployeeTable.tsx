@@ -7,10 +7,11 @@ import {
   useReactTable,
   type ColumnDef,
 } from "@tanstack/react-table";
-import { Users } from "lucide-react";
+import { Users, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -20,6 +21,40 @@ import { useEmployees } from "@/modules/employees/hooks";
 import type { EmployeeListItem } from "@/modules/employees/types";
 import { cn } from "@/lib/utils/cn";
 import type { BadgeProps } from "@/components/ui/badge";
+
+type SortBy = "name" | "joiningDate" | "status" | "employeeId" | "department";
+type SortOrder = "asc" | "desc";
+
+function SortableHeader({
+  label,
+  sortKey,
+  current,
+  order,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortBy;
+  current: SortBy;
+  order: SortOrder;
+  onSort: (key: SortBy) => void;
+}) {
+  const active = current === sortKey;
+  return (
+    <button
+      onClick={() => onSort(sortKey)}
+      className="flex items-center gap-1 group select-none"
+    >
+      {label}
+      <span className="text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+        {active ? (
+          order === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronsUpDown className="h-3.5 w-3.5" />
+        )}
+      </span>
+    </button>
+  );
+}
 
 type Department = { id: string; name: string; parentId: string | null };
 type Location = { id: string; name: string };
@@ -99,11 +134,17 @@ function DocumentExpiryCell({ row }: { row: { original: EmployeeListItem } }) {
   );
 }
 
-function buildColumns(): ColumnDef<EmployeeListItem>[] {
+function buildColumns(
+  sortBy: SortBy,
+  sortOrder: SortOrder,
+  onSort: (key: SortBy) => void
+): ColumnDef<EmployeeListItem>[] {
   return [
     {
       id: "employee",
-      header: "Employee",
+      header: () => (
+        <SortableHeader label="Employee" sortKey="name" current={sortBy} order={sortOrder} onSort={onSort} />
+      ),
       cell: ({ row }) => {
         const { firstName, lastName, email, photo, id } = row.original;
         const isArchived = !!row.original.deletedAt;
@@ -139,7 +180,9 @@ function buildColumns(): ColumnDef<EmployeeListItem>[] {
     },
     {
       accessorKey: "employeeId",
-      header: "ID",
+      header: () => (
+        <SortableHeader label="ID" sortKey="employeeId" current={sortBy} order={sortOrder} onSort={onSort} />
+      ),
       cell: ({ row }) => (
         <span
           className={cn(
@@ -153,7 +196,9 @@ function buildColumns(): ColumnDef<EmployeeListItem>[] {
     },
     {
       id: "deptPosition",
-      header: "Department / Position",
+      header: () => (
+        <SortableHeader label="Department / Position" sortKey="department" current={sortBy} order={sortOrder} onSort={onSort} />
+      ),
       cell: ({ row }) => {
         const { department, position, deletedAt } = row.original;
         return (
@@ -168,7 +213,9 @@ function buildColumns(): ColumnDef<EmployeeListItem>[] {
     },
     {
       id: "status",
-      header: "Status",
+      header: () => (
+        <SortableHeader label="Status" sortKey="status" current={sortBy} order={sortOrder} onSort={onSort} />
+      ),
       cell: ({ row }) => {
         const isArchived = !!row.original.deletedAt;
         if (isArchived) {
@@ -184,7 +231,9 @@ function buildColumns(): ColumnDef<EmployeeListItem>[] {
     },
     {
       accessorKey: "joiningDate",
-      header: "Joined",
+      header: () => (
+        <SortableHeader label="Joined" sortKey="joiningDate" current={sortBy} order={sortOrder} onSort={onSort} />
+      ),
       cell: ({ row }) => (
         <span
           className={cn(
@@ -208,16 +257,29 @@ function buildColumns(): ColumnDef<EmployeeListItem>[] {
   ];
 }
 
-const columns = buildColumns();
-
 export function EmployeeTable({ departments, locations }: Props) {
   const [filters, setFilters] = useState<EmployeeFilters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<SortBy>("joiningDate");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  const [limit, setLimit] = useState(25);
 
   const handleFiltersChange = useCallback((next: EmployeeFilters) => {
     setFilters(next);
     setPage(1);
   }, []);
+
+  const handleSort = useCallback((key: SortBy) => {
+    if (key === sortBy) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("asc");
+    }
+    setPage(1);
+  }, [sortBy]);
+
+  const columns = buildColumns(sortBy, sortOrder, handleSort);
 
   // Map EmployeeFilters → useEmployees params (empty strings become undefined)
   const queryParams = {
@@ -244,6 +306,9 @@ export function EmployeeTable({ departments, locations }: Props) {
       | "expiring_soon"
       | undefined,
     includeArchived: filters.includeArchived || undefined,
+    sortBy,
+    sortOrder,
+    limit,
     page,
   };
 
@@ -374,35 +439,54 @@ export function EmployeeTable({ departments, locations }: Props) {
       </div>
 
       {/* Pagination */}
-      {data && data.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Showing{" "}
-            {((page - 1) * data.limit + 1).toLocaleString()}–
-            {Math.min(page * data.limit, data.total).toLocaleString()} of{" "}
-            {data.total.toLocaleString()} employees
-          </p>
+      {data && (data.totalPages > 1 || data.total > 0) && (
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === 1 || isLoading}
-              onClick={() => setPage((p) => p - 1)}
+            <span className="text-sm text-muted-foreground">Rows per page</span>
+            <Select
+              value={String(limit)}
+              onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}
             >
-              Previous
-            </Button>
-            <span className="text-sm text-muted-foreground tabular-nums px-1">
-              {page} / {data.totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === data.totalPages || isLoading}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+          {data.totalPages > 1 && (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-muted-foreground tabular-nums">
+                {((page - 1) * data.limit + 1).toLocaleString()}–
+                {Math.min(page * data.limit, data.total).toLocaleString()} of{" "}
+                {data.total.toLocaleString()}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 1 || isLoading}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground tabular-nums px-1">
+                  {page} / {data.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === data.totalPages || isLoading}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

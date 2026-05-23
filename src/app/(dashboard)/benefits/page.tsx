@@ -1,24 +1,23 @@
 import type { Metadata } from "next";
-import { Heart } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requireSession } from "@/lib/auth/session";
+import { getBenefitStats } from "@/modules/benefits/queries";
+import { BenefitsClient } from "./BenefitsClient";
 
 export const metadata: Metadata = { title: "Benefits" };
 
-export default function BenefitsPage() {
+export default async function BenefitsPage() {
+  const { companyId } = await requireSession();
+  const stats = await getBenefitStats(companyId);
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Benefits Management" description="Track employee benefits, insurance, and perks" />
-      <Card>
-        <CardHeader><CardTitle className="text-base">Benefits</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Heart className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium">No benefits configured</p>
-            <p className="text-sm text-muted-foreground">Configure benefit types to start tracking.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div>
+        <h1 className="text-2xl font-bold">Benefits Management</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Track employee benefits, insurance, and perks
+        </p>
+      </div>
+      <BenefitsClient initialStats={stats} />
     </div>
   );
 }

@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import Link from "next/link";
-import { UserPlus } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SkeletonTable } from "@/components/shared/SkeletonLoader";
 import { EmployeeTable } from "@/components/modules/employees/EmployeeTable";
+import { EmployeePageActions } from "@/components/modules/employees/EmployeePageActions";
 import { requireSession } from "@/lib/auth/session";
 import {
   getDepartmentsForCompany,
@@ -27,12 +25,9 @@ export default async function EmployeesPage() {
         title="Employees"
         description="Manage your workforce, roles, and personal information"
         actions={
-          <Button asChild>
-            <Link href="/employees/new">
-              <UserPlus className="h-4 w-4" />
-              Add Employee
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <EmployeePageActions />
+          </div>
         }
       />
       <Suspense fallback={<SkeletonTable rows={10} />}>

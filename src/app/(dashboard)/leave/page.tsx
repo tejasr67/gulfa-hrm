@@ -1,59 +1,29 @@
 import type { Metadata } from "next";
-import { Calendar } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { requireSession } from "@/lib/auth/session";
+import { getLeaveStats, getLeaveRequests, getLeaveTypes, getLeaveBalances } from "@/modules/leave/queries";
+import { LeaveDashboardClient } from "./LeaveDashboardClient";
 
 export const metadata: Metadata = { title: "Leave Management" };
 
-const QUICK_STATS = [
-  { label: "Pending Approvals", value: "—", variant: "warning" as const },
-  { label: "On Leave Today", value: "—", variant: "info" as const },
-  { label: "Approved This Month", value: "—", variant: "success" as const },
-  { label: "Rejected This Month", value: "—", variant: "danger" as const },
-];
+export default async function LeavePage() {
+  const session = await requireSession();
+  const year = new Date().getFullYear();
 
-export default function LeavePage() {
+  const [stats, requests, leaveTypes, myBalances] = await Promise.all([
+    getLeaveStats(session.companyId),
+    getLeaveRequests(session.companyId, { limit: 20 }),
+    getLeaveTypes(session.companyId),
+    session.employeeId ? getLeaveBalances(session.employeeId, year) : Promise.resolve([]),
+  ]);
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Leave Management"
-        description="Manage leave requests, balances, and policies"
-        actions={
-          <Button>Apply for Leave</Button>
-        }
-      />
-
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {QUICK_STATS.map(({ label, value, variant }) => (
-          <Card key={label}>
-            <CardContent className="pt-6">
-              <p className="text-2xl font-bold">{value}</p>
-              <div className="mt-1 flex items-center gap-2">
-                <Badge variant={variant} className="text-[10px]">
-                  {label}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Leave Requests</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Calendar className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium">No leave requests</p>
-            <p className="text-sm text-muted-foreground">
-              Connect your database to see leave requests here.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    <LeaveDashboardClient
+      initialStats={stats}
+      initialRequests={requests.data}
+      leaveTypes={leaveTypes}
+      myBalances={myBalances}
+      employeeId={session.employeeId}
+      role={session.role}
+    />
   );
 }

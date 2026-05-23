@@ -1,3 +1,4 @@
+import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import type {
@@ -176,7 +177,7 @@ export async function getEmployees(companyId: string, filters: EmployeeFilters =
   const where = await buildEmployeeWhere(companyId, filters);
   const orderBy = buildEmployeeOrderBy(sortBy, sortOrder);
 
-  const [total, employees] = await prisma.$transaction([
+  const [total, employees] = await Promise.all([
     prisma.employee.count({ where }),
     prisma.employee.findMany({
       where,
@@ -319,7 +320,7 @@ export async function restoreEmployee(id: string, companyId: string, userId: str
 }
 
 export async function getEmployeeStats(companyId: string) {
-  const [total, active, onLeave, terminated] = await prisma.$transaction([
+  const [total, active, onLeave, terminated] = await Promise.all([
     prisma.employee.count({ where: { companyId, deletedAt: null } }),
     prisma.employee.count({ where: { companyId, deletedAt: null, status: "ACTIVE" } }),
     prisma.employee.count({ where: { companyId, deletedAt: null, status: "ON_LEAVE" } }),
@@ -405,7 +406,7 @@ export async function getEmployeeTimeline(id: string, companyId: string): Promis
   });
   if (!emp) throw new Error("Employee not found");
 
-  const [auditLogs, careerHistory] = await prisma.$transaction([
+  const [auditLogs, careerHistory] = await Promise.all([
     prisma.auditLog.findMany({
       where: {
         OR: [
@@ -483,5 +484,21 @@ export async function getLocationsForCompany(companyId: string) {
     where: { companyId, isActive: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
+  });
+}
+
+export async function getPositionsForCompany(companyId: string) {
+  return prisma.position.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, title: true, departmentId: true },
+    orderBy: { title: "asc" },
+  });
+}
+
+export async function getManagersForCompany(companyId: string) {
+  return prisma.employee.findMany({
+    where: { companyId, deletedAt: null, status: { not: "TERMINATED" } },
+    select: { id: true, firstName: true, lastName: true, employeeId: true },
+    orderBy: { firstName: "asc" },
   });
 }

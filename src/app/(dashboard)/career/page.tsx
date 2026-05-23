@@ -1,24 +1,18 @@
 import type { Metadata } from "next";
-import { TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requireSession } from "@/lib/auth/session";
+import { getCareerStats } from "@/modules/career/queries";
+import { CareerClient } from "./CareerClient";
 
 export const metadata: Metadata = { title: "Career History" };
 
-export default function CareerPage() {
+export default async function CareerPage() {
+  const { companyId } = await requireSession();
+  const stats = await getCareerStats(companyId);
   return (
     <div className="space-y-6">
-      <PageHeader title="Career History" description="Track promotions, transfers, and role changes" />
-      <Card>
-        <CardHeader><CardTitle className="text-base">Career Events</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <TrendingUp className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium">No career events</p>
-            <p className="text-sm text-muted-foreground">Career history will appear here once recorded.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <PageHeader title="Career History" description="Track promotions, transfers, salary revisions, and role changes" />
+      <CareerClient initialStats={stats} />
     </div>
   );
 }

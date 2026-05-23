@@ -1,33 +1,37 @@
 import type { Metadata } from "next";
-import { Package } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
+import Link from "next/link";
+import { requireSession } from "@/lib/auth/session";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Wrench, BarChart2 } from "lucide-react";
+import { getAssetStats } from "@/modules/assets/queries";
+import { AssetsClient } from "./AssetsClient";
 
 export const metadata: Metadata = { title: "Asset Management" };
 
-export default function AssetsPage() {
+export default async function AssetsPage() {
+  const { companyId } = await requireSession();
+  const stats = await getAssetStats(companyId);
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Asset Management"
-        description="Track company assets, assignments, and maintenance"
-        actions={<Button>Add Asset</Button>}
-      />
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Assets</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Package className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium">No assets</p>
-            <p className="text-sm text-muted-foreground">
-              Add your first asset to start tracking.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/assets/maintenance">
+              <Wrench className="h-4 w-4" />
+              Maintenance
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/assets/reports">
+              <BarChart2 className="h-4 w-4" />
+              Reports
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      <AssetsClient initialStats={stats} />
     </div>
   );
 }

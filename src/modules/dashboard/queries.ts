@@ -1,3 +1,4 @@
+import "server-only";
 import { prisma } from "@/lib/prisma";
 import { DOCUMENT_ALERT_DAYS } from "@/lib/utils/constants";
 
@@ -16,7 +17,7 @@ export async function getDashboardStats(companyId: string): Promise<DashboardSta
   thirtyDaysOut.setDate(today.getDate() + DOCUMENT_ALERT_DAYS.CRITICAL);
 
   const [presentToday, pendingLeave, expiringDocs, payrollResult] =
-    await prisma.$transaction([
+    await Promise.all([
       prisma.attendanceRecord.count({
         where: {
           employee: { companyId, deletedAt: null },

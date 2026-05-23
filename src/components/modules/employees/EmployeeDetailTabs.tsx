@@ -6,9 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   TrendingUp,
-  ArrowRightLeft,
-  DollarSign,
-  ChevronDown,
   Archive,
   RefreshCcw,
   AlertTriangle,
@@ -26,6 +23,11 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { ProfileCompleteness } from "./ProfileCompleteness";
 import { StatusWorkflowModal } from "./StatusWorkflowModal";
 import { DocumentCenter } from "./DocumentCenter";
+import { LeaveTab } from "./tabs/LeaveTab";
+import { AttendanceTab } from "./tabs/AttendanceTab";
+import { PayrollTab } from "./tabs/PayrollTab";
+import { AssetsTab } from "./tabs/AssetsTab";
+import { DisciplinaryTab } from "./tabs/DisciplinaryTab";
 import { formatDate, getExpiryStatus } from "@/lib/utils/formatters";
 import { useEmployeeTimeline } from "@/modules/employees/hooks";
 import { changeEmployeeStatusAction, restoreEmployeeAction } from "@/modules/employees/actions";
@@ -93,8 +95,16 @@ type EmployeeData = {
     toPosition: string | null;
     fromDepartment: string | null;
     toDepartment: string | null;
+    fromManagerId: string | null;
+    toManagerId: string | null;
+    fromLocationId: string | null;
+    toLocationId: string | null;
+    fromSalary: number | null;
+    toSalary: number | null;
     effectiveDate: Date;
     reason: string | null;
+    notes: string | null;
+    approvedBy: string | null;
   }[];
   salaries: {
     basicSalary: number;
@@ -241,6 +251,11 @@ const CAREER_TYPE_STYLES: Record<
     className:
       "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800/40 dark:text-gray-400 dark:border-gray-700",
   },
+  MANAGER_CHANGE: {
+    label: "Manager Change",
+    className:
+      "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800",
+  },
 };
 
 function CareerTypeBadge({ type }: { type: string }) {
@@ -328,7 +343,7 @@ export function EmployeeDetailTabs({ employee, canEdit }: Props) {
       )}
 
       <Tabs defaultValue="overview">
-        <TabsList className="mb-6">
+        <TabsList className="mb-6 flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="documents">
             Documents
@@ -338,8 +353,13 @@ export function EmployeeDetailTabs({ employee, canEdit }: Props) {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          <TabsTrigger value="leave">Leave</TabsTrigger>
+          <TabsTrigger value="attendance">Attendance</TabsTrigger>
+          <TabsTrigger value="payroll">Payroll</TabsTrigger>
+          <TabsTrigger value="assets">Assets</TabsTrigger>
+          <TabsTrigger value="disciplinary">Disciplinary</TabsTrigger>
           <TabsTrigger value="career">Career</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
         {/* ── Overview ── */}
@@ -647,6 +667,31 @@ export function EmployeeDetailTabs({ employee, canEdit }: Props) {
           />
         </TabsContent>
 
+        {/* ── Leave ── */}
+        <TabsContent value="leave">
+          <LeaveTab employeeId={employee.id} />
+        </TabsContent>
+
+        {/* ── Attendance ── */}
+        <TabsContent value="attendance">
+          <AttendanceTab employeeId={employee.id} />
+        </TabsContent>
+
+        {/* ── Payroll ── */}
+        <TabsContent value="payroll">
+          <PayrollTab employeeId={employee.id} />
+        </TabsContent>
+
+        {/* ── Assets ── */}
+        <TabsContent value="assets">
+          <AssetsTab employeeId={employee.id} />
+        </TabsContent>
+
+        {/* ── Disciplinary ── */}
+        <TabsContent value="disciplinary">
+          <DisciplinaryTab employeeId={employee.id} />
+        </TabsContent>
+
         {/* ── Timeline ── */}
         <TabsContent value="timeline">
           <TimelineTab employeeId={employee.id} />
@@ -654,6 +699,11 @@ export function EmployeeDetailTabs({ employee, canEdit }: Props) {
 
         {/* ── Career ── */}
         <TabsContent value="career">
+          <div className="flex justify-end mb-4">
+            <Link href={`/career/${employee.id}`} className="text-sm text-primary hover:underline underline-offset-2">
+              Full career timeline →
+            </Link>
+          </div>
           {employee.careerHistory.length === 0 ? (
             <EmptyState
               icon={TrendingUp}

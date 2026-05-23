@@ -1,33 +1,43 @@
 import type { Metadata } from "next";
-import { DollarSign } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
+import Link from "next/link";
+import { requireSession } from "@/lib/auth/session";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BarChart2, DollarSign, Users } from "lucide-react";
+import { getPayrollStats } from "@/modules/payroll/queries";
+import { PayrollClient } from "./PayrollClient";
 
 export const metadata: Metadata = { title: "Payroll" };
 
-export default function PayrollPage() {
+export default async function PayrollPage() {
+  const { companyId } = await requireSession();
+  const stats = await getPayrollStats(companyId);
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Payroll"
-        description="Process monthly payroll, view payslips, and manage salary structures"
-        actions={<Button>Run Payroll</Button>}
-      />
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Payroll Runs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <DollarSign className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium">No payroll runs</p>
-            <p className="text-sm text-muted-foreground">
-              Connect your database and run your first payroll.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/payroll/salary-structure">
+              <DollarSign className="h-4 w-4" />
+              Salary Structure
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/payroll/advances">
+              <Users className="h-4 w-4" />
+              Advances
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/payroll/reports">
+              <BarChart2 className="h-4 w-4" />
+              Reports
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      <PayrollClient initialStats={stats} />
     </div>
   );
 }
